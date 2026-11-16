@@ -38,32 +38,45 @@ command -v apt-get >/dev/null || die "Скрипт рассчитан на Ubunt
 export DEBIAN_FRONTEND=noninteractive
 
 log "Устанавливаю пакеты..."
-apt-get update -qq
-apt-get install -y -qq iptables kmod xtables-addons-common
+apt-get update -qq || warn "apt-get update завершился с ошибкой."
 
-# Заголовки ядра нужны, чтобы DKMS собрал модуль под текущее ядро.
-if ! apt-get install -y -qq "linux-headers-$(uname -r)"; then
-    warn "Не нашлись заголовки для ядра $(uname -r)."
-    warn "Обычно помогает: apt full-upgrade && reboot, затем запустить скрипт ещё раз."
-fi
+# apt может вернуть ошибку, даже если нужное установилось: например, когда DKMS
+# не смог собрать модуль под одно из НЕ текущих ядер. Поэтому ошибки apt здесь
+# не прерывают скрипт - ниже проверяется фактический результат.
+apt_install() {
+    apt-get install -y -qq "$@" || warn "apt вернул ошибку при установке: $*"
+}
 
-# Метапакет заголовков: с ним заголовки приходят вместе с каждым новым ядром,
-# и DKMS сам пересобирает модуль после обновления ядра.
-KERNEL_FLAVOR="$(uname -r | sed 's/.*-//')"
-if ! apt-get install -y -qq "linux-headers-${KERNEL_FLAVOR}"; then
-    warn "Не удалось поставить метапакет linux-headers-${KERNEL_FLAVOR}."
-    warn "После обновления ядра модуль может не собраться - тогда запустите скрипт ещё раз."
-fi
+KERNEL="$(uname -r)"
+KERNEL_FLAVOR="${KERNEL##*-}"
 
-apt-get install -y -qq xtables-addons-dkms || warn "xtables-addons-dkms установился с ошибкой."
+apt_install iptables kmod xtables-addons-common
+# Заголовки текущего ядра - чтобы DKMS собрал модуль под него.
+apt_install "linux-headers-${KERNEL}"
+# Метапакет заголовков - чтобы модуль пересобирался после обновления ядра.
+apt_install "linux-headers-${KERNEL_FLAVOR}"
+apt_install xtables-addons-dkms
+
+command -v iptables >/dev/null || die "iptables не установлен - продолжать нельзя."
 
 depmod -a
 if modprobe xt_ipp2p 2>/dev/null; then
-    log "Модуль xt_ipp2p загружен."
+    log "Модуль xt_ipp2p загружен (ядро ${KERNEL})."
 else
-    warn "Модуль xt_ipp2p не загрузился (проверьте: dkms status)."
+    warn "Модуль xt_ipp2p не загрузился под ядро ${KERNEL} (проверьте: dkms status)."
     warn "Будут работать только резервные правила по сигнатурам (-m string)."
 fi
+
+# Другие установленные ядра: предупредить, если под какое-то модуль не собран.
+for dir in /lib/modules/*/; do
+    k="$(basename "$dir")"
+    [[ "$k" == "$KERNEL" ]] && continue
+    [[ -e "/boot/vmlinuz-$k" ]] || continue
+    if ! compgen -G "${dir}updates/dkms/xt_ipp2p.ko*" >/dev/null; then
+        warn "Под ядро $k модуль xt_ipp2p не собран: если сервер загрузится"
+        warn "в это ядро, останутся только правила по сигнатурам."
+    fi
+done
 
 # ---------- управляющий скрипт ----------
 log "Создаю $BIN"
