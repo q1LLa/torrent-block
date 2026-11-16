@@ -47,6 +47,14 @@ if ! apt-get install -y -qq "linux-headers-$(uname -r)"; then
     warn "Обычно помогает: apt full-upgrade && reboot, затем запустить скрипт ещё раз."
 fi
 
+# Метапакет заголовков: с ним заголовки приходят вместе с каждым новым ядром,
+# и DKMS сам пересобирает модуль после обновления ядра.
+KERNEL_FLAVOR="$(uname -r | sed 's/.*-//')"
+if ! apt-get install -y -qq "linux-headers-${KERNEL_FLAVOR}"; then
+    warn "Не удалось поставить метапакет linux-headers-${KERNEL_FLAVOR}."
+    warn "После обновления ядра модуль может не собраться - тогда запустите скрипт ещё раз."
+fi
+
 apt-get install -y -qq xtables-addons-dkms || warn "xtables-addons-dkms установился с ошибкой."
 
 depmod -a
