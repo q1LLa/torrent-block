@@ -130,6 +130,14 @@ SIGNATURES=(
     "announce_peer"         # DHT
     "get_peers"             # DHT
     "find_node"             # DHT
+    "d1:eli20"              # DHT: сообщение об ошибке
+)
+
+# Параметры HTTP-трекера: срабатывают только вместе с "GET /" в том же пакете
+# (так же проверяет xt_ipp2p). passkey= используют приватные трекеры.
+TCP_GET_SIGNATURES=(
+    "peer_id="
+    "passkey="
 )
 
 # Бинарные сигнатуры только для UDP.
@@ -172,6 +180,12 @@ apply() {
         for sig in "${SIGNATURES[@]}"; do
             "$ipt" -w -A "$CHAIN" -m string --algo bm --to "$SCAN_TO" --string "$sig" -j DROP \
                 || { echo "$ipt: не добавилась сигнатура '$sig'" >&2; failed=1; }
+        done
+        for sig in "${TCP_GET_SIGNATURES[@]}"; do
+            "$ipt" -w -A "$CHAIN" -p tcp \
+                -m string --algo bm --to "$SCAN_TO" --string "GET /" \
+                -m string --algo bm --to "$SCAN_TO" --string "$sig" -j DROP \
+                || { echo "$ipt: не добавилась сигнатура 'GET / + $sig'" >&2; failed=1; }
         done
         for sig in "${UDP_HEX_SIGNATURES[@]}"; do
             "$ipt" -w -A "$CHAIN" -p udp -m string --algo bm --to "$SCAN_TO" --hex-string "$sig" -j DROP \

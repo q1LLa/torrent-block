@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/q1LLa/torrent-block/main/install.sh
 
 - рукопожатие между пирами (`BitTorrent protocol`, TCP и uTP);
 - DHT (запросы, ответы, `get_peers`, `announce_peer`, `find_node`);
-- HTTP-трекеры (`info_hash=`);
+- HTTP-трекеры (`info_hash=`, а также `peer_id=` и `passkey=` в GET-запросах);
 - UDP-трекеры (запрос connect).
 
 Правила лежат в цепочке `TORRENT_BLOCK`, подключённой к `INPUT`, `OUTPUT` и `FORWARD` (IPv4 и IPv6). Сервис `torrent-block.service` восстанавливает их после перезагрузки.
