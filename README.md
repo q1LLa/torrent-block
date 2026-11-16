@@ -1,6 +1,6 @@
 # torrent-block
 
-Блокировка BitTorrent-трафика на Ubuntu через xtables-addons (модуль `xt_ipp2p`) с резервными правилами по сигнатурам (`-m string`). Подходит для VPN-нод, в том числе Remnawave Node (`network_mode: host`).
+Блокировка BitTorrent-трафика на Ubuntu для VPN-нод, в том числе Remnawave Node (`network_mode: host`).
 
 ## Установка
 
@@ -8,16 +8,30 @@
 curl -fsSL https://raw.githubusercontent.com/q1LLa/torrent-block/main/install.sh | sudo bash
 ```
 
-## Что делает скрипт
+## Режимы
 
-- ставит `xtables-addons-common`, `xtables-addons-dkms`, заголовки текущего ядра и метапакет заголовков (чтобы модуль пересобирался после обновления ядра);
-- создаёт цепочку `TORRENT_BLOCK` и подключает её к `INPUT`, `OUTPUT` и `FORWARD` (IPv4 и IPv6);
-- добавляет сервис `torrent-block.service`, который восстанавливает правила после перезагрузки.
+Режим выбирается автоматически по ядру:
+
+| Ядро | Как блокируется |
+|---|---|
+| Штатное ядро Ubuntu | модуль `xt_ipp2p` из xtables-addons (DKMS) + сигнатуры |
+| Ядро, собранное clang (XanMod) | только сигнатуры на встроенном модуле `xt_string` |
+
+На XanMod сторонний модуль не собирается: xtables-addons отстаёт от свежих ядер и требует сборки через clang. Сигнатуры покрывают тот же нешифрованный BitTorrent и не ломаются при обновлении ядра.
+
+## Что блокируется
+
+- рукопожатие между пирами (`BitTorrent protocol`, TCP и uTP);
+- DHT (запросы, ответы, `get_peers`, `announce_peer`, `find_node`);
+- HTTP-трекеры (`info_hash=`);
+- UDP-трекеры (запрос connect).
+
+Правила лежат в цепочке `TORRENT_BLOCK`, подключённой к `INPUT`, `OUTPUT` и `FORWARD` (IPv4 и IPv6). Сервис `torrent-block.service` восстанавливает их после перезагрузки.
 
 ## Управление
 
 ```bash
-torrent-block status   # правила и счётчики пакетов
+torrent-block status   # режим, правила и счётчики пакетов
 torrent-block remove   # временно снять правила (до перезагрузки)
 torrent-block apply    # применить снова
 ```
@@ -30,6 +44,6 @@ curl -fsSL https://raw.githubusercontent.com/q1LLa/torrent-block/main/install.sh
 
 ## Ограничения
 
-- Блокируется только нешифрованный BitTorrent. Клиенты с принудительным шифрованием и HTTPS-трекеры могут проходить.
+- Блокируется только нешифрованный BitTorrent. Клиенты с принудительным шифрованием протокола и HTTPS-трекеры могут проходить. Для них стоит дополнительно включить плагин Torrent Blocker в Remnawave или правило `protocol: bittorrent` в роутинге Xray.
 - Ставить нужно на выходные ноды: на входной ноде каскада трафик уже зашифрован.
-- Если метапакет заголовков поставить не удалось, после обновления ядра модуль не соберётся; останутся только правила по сигнатурам, пока скрипт не запустят повторно.
+- На ядре, собранном clang, скрипт удаляет пакет `xtables-addons-dkms`, если он установлен: под такое ядро он не собирается и ломает `apt`.
